@@ -153,6 +153,19 @@
         #panel button.rec.on {
             background: rgba(255, 93, 122, 0.3);
         }
+        #panel .group button.active {
+            background: rgba(120, 90, 255, 0.35);
+            border-color: rgba(140, 110, 255, 0.8);
+            font-weight: 600;
+        }
+        #panel .group h3 {
+            color: rgba(255,255,255,0.55);
+            font-size: 12px;
+            font-weight: 500;
+            margin: 2px 2px 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
         #panelClose {
             width: 34px !important;
             height: 34px !important;
@@ -177,9 +190,13 @@
         <button class="rec" data-act="record" id="btn-record">● Enregistrer</button>
         <button data-act="switch">↔ Caméra avant / arrière</button>
         <button data-act="mirror" data-label="🪞 Miroir">🪞 Miroir</button>
-        <button data-act="effect" data-label="✨ Effet antimatière">✨ Effet antimatière</button>
-        <button data-act="halo" data-label="🌌 Halo violet">🌌 Halo violet</button>
-        <button data-act="pulse" data-label="💓 Pulsation">💓 Pulsation</button>
+        <div class="group">
+            <h3>Effet (un seul à la fois)</h3>
+            <button data-effect="none">Aucun</button>
+            <button data-effect="base" class="active">Antimatière</button>
+            <button data-effect="halo">Antimatière + halo</button>
+            <button data-effect="pulse">Antimatière + pulsation</button>
+        </div>
         <button data-act="status" data-label="ℹ️ Infos écran">ℹ️ Infos écran</button>
         <button data-act="fullscreen">⛶ Plein écran</button>
     </div>
@@ -198,10 +215,8 @@
         let running = false;
 
         let mirrorOn = true;
-        let effectOn = true;
-        let haloOn = true;
-        let pulseOn = true;
         let statusOn = true;
+        let effectMode = 'base';
 
         function status(msg) {
             statusEl.style.display = 'block';
@@ -263,8 +278,10 @@
             const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
             const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
             const maxR = Math.max(...pts.map(p => Math.hypot(p.x - cx, p.y - cy)));
+            const useHalo = effectMode === 'halo';
+            const usePulse = effectMode === 'pulse';
             const t = performance.now() / 1000;
-            const pulse = pulseOn ? (0.75 + 0.25 * Math.sin(t * 2)) : 1;
+            const pulse = usePulse ? (0.75 + 0.25 * Math.sin(t * 2)) : 1;
 
             ctx.save();
             traceQuad(pts);
@@ -278,12 +295,12 @@
             ctx.fill();
             ctx.restore();
 
-            if (haloOn && ctx.filter !== undefined) {
+            if (useHalo && ctx.filter !== undefined) {
                 ctx.save();
-                ctx.filter = 'blur(12px)';
+                ctx.filter = 'blur(7px)';
                 traceQuad(pts);
-                ctx.strokeStyle = 'rgba(180, 130, 255, ' + (0.5 * pulse).toFixed(2) + ')';
-                ctx.lineWidth = 10;
+                ctx.strokeStyle = 'rgba(180, 130, 255, 0.35)';
+                ctx.lineWidth = 7;
                 ctx.stroke();
                 ctx.restore();
             }
@@ -319,7 +336,7 @@
         function detect() {
             if (!running || !handLandmarker) return;
             const now = performance.now();
-            if (now - lastDetectTime >= 16) {
+            if (now - lastDetectTime >= 33) {
                 lastDetectTime = now;
                 let results;
                 try {
@@ -354,7 +371,7 @@
                     if (!smoothedRect) {
                         smoothedRect = newPts.map(p => ({ x: p.x, y: p.y }));
                     } else {
-                        const f = 0.7;
+                        const f = 0.75;
                         smoothedRect = smoothedRect.map((sm, i) => ({
                             x: sm.x + (newPts[i].x - sm.x) * f,
                             y: sm.y + (newPts[i].y - sm.y) * f
@@ -402,7 +419,7 @@
                 statusEl.textContent = 'Mains détectées : ' + results.landmarks.length;
             }
 
-            if (effectOn && smoothedRect && rectVisible) {
+            if (effectMode !== 'none' && smoothedRect && rectVisible) {
                 drawCornerRect(smoothedRect);
             }
             requestAnimationFrame(detect);
@@ -532,7 +549,7 @@
         }
 
         function resizeCanvas() {
-            const maxW = 640;
+            const maxW = 480;
             const scale = Math.min(1, maxW / video.videoWidth);
             canvas.width = Math.round(video.videoWidth * scale);
             canvas.height = Math.round(video.videoHeight * scale);
@@ -568,18 +585,6 @@
                     mirrorOn = !mirrorOn;
                     setTxt(btn, '🪞 Miroir', mirrorOn);
                     break;
-                case 'effect':
-                    effectOn = !effectOn;
-                    setTxt(btn, '✨ Effet antimatière', effectOn);
-                    break;
-                case 'halo':
-                    haloOn = !haloOn;
-                    setTxt(btn, '🌌 Halo violet', haloOn);
-                    break;
-                case 'pulse':
-                    pulseOn = !pulseOn;
-                    setTxt(btn, '💓 Pulsation', pulseOn);
-                    break;
                 case 'status':
                     statusOn = !statusOn;
                     setTxt(btn, 'ℹ️ Infos écran', statusOn);
@@ -589,6 +594,13 @@
                     toggleFullscreen();
                     break;
             }
+        });
+
+        panel.querySelectorAll('[data-effect]').forEach(b => {
+            b.addEventListener('click', () => {
+                effectMode = b.dataset.effect;
+                panel.querySelectorAll('[data-effect]').forEach(o => o.classList.toggle('active', o === b));
+            });
         });
 
         document.getElementById('menuBtn').addEventListener('click', () => {
